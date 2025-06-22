@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Water Sort Game</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <link rel="stylesheet" href="style.css"> </head>
+<body>
+    <div class="level-popup hidden" id="levelPopup">
+        <button class="level-btn" data-level="1">Level 1</button>
+        <button class="level-btn" data-level="2">Level 2</button>
+        <button class="level-btn" data-level="3">Level 3</button>
+        <button class="level-btn locked" disabled>Level 4</button>
+        <button class="level-btn locked" disabled>Level 5</button>
+        <button onclick="closeLevelPopup()">Close</button>
+    </div>
+
+    <div class="next-level-popup hidden" id="nextLevelPopup">
+        <div class="next-level-content">
+            <h2>Level Selesai!</h2>
+            <p>Selamat, Anda berhasil menyelesaikan level ini!</p>
+            <button id="nextLevelBtn">Level Selanjutnya</button>
+            <button id="closeNextLevelPopupBtn">Tutup</button>
+        </div>
+    </div>
+
+    <div class="top-bar">
+        <span id="level-indicator">Level 2</span> <button id="resetBtn"><i class="fas fa-undo-alt"></i></button>
+    </div>
+
+    <button id="levelBtn">Level</button>
+
+    <div id="game">
+        </div>
+
+    <audio id="pourSound" src="pour.mp3"></audio>
+    <audio id="winSound" src="win.mp3"></audio>
+
+    <footer class="footer">
+        &copy; Druasoy
+    </footer>
+
+    <script>
+const levels = {
+    1: {
+        tubes: [
+            ["sponc"],
+            ["sponc"]
+        ],
+        capacity: 3,
+        winConditionLength: 2
+    },
+    2: {
+        tubes: [
+            ["patpat", "squid", "patpat"],
+            ["squid", "patpat", "squid"],
+            [],
+            []
+        ],
+        capacity: 3
+    },
+    3: {
+        tubes: [
+            ["patpat", "sponc"],
+            ["sponc", "patpat"],
+            ["patpat"],
+            ["sponc"]
+        ],
+        capacity: 3
+    }
+};
+
+let currentLevel = 2;
+const game = document.getElementById('game');
+const resetBtn = document.getElementById('resetBtn');
+const levelIndicator = document.getElementById('level-indicator');
+const levelPopup = document.getElementById('levelPopup');
+const levelBtn = document.getElementById('levelBtn');
+
+let selectedTube = null;
+let completedTubes = new Set();
+let currentMaxTubeCapacity = 0;
+
+const nextLevelPopup = document.getElementById('nextLevelPopup');
+const nextLevelBtn = document.getElementById('nextLevelBtn');
+const closeNextLevelPopupBtn = document.getElementById('closeNextLevelPopupBtn');
+
+
+function getColorClass(element) {
+    return Array.from(element.classList).find(cls => cls !== 'color' && cls !== 'color-empty' && cls !== 'waving');
+}
+
+function injectImagesToColors() {
+    const imageMap = {
+        squid: 'images/squid.png',
+        patpat: 'images/patpat.png',
+        sponc: 'images/sponc.png'
+    };
+
+    document.querySelectorAll('.color:not(.color-empty)').forEach(div => {
+        const colorClass = getColorClass(div);
+        if (imageMap[colorClass] && !div.querySelector('img')) {
+            const img = document.createElement('img');
+            img.src = imageMap[colorClass];
+            img.alt = colorClass;
+            img.classList.add('icon-img');
+            div.appendChild(img);
+        }
+    });
+}
+
+function checkTubeCompletion(tube) {
+    const tubes = Array.from(document.querySelectorAll('.tube'));
+    const tubeIndex = tubes.indexOf(tube);
+
+    if (currentLevel === 1) {
+        const requiredLengthForLevel1Win = levels[1].winConditionLength;
+        let isLevel1WinConditionMet = false;
+
+        for (const t of tubes) {
+            const tColors = Array.from(t.querySelectorAll('.color:not(.color-empty)'))
+                .map(div => getColorClass(div))
+                .filter(color => color);
+            
+            if (tColors.length === requiredLengthForLevel1Win && tColors.every(color => color === tColors[0])) {
+                isLevel1WinConditionMet = true;
+            }
+        }
+
+        if (isLevel1WinConditionMet) {
+            showStars();
+            setTimeout(() => {
+                showNextLevelPopup();
+            }, 1000); 
+        }
+    }
+
+    const colors = Array.from(tube.querySelectorAll('.color:not(.color-empty)'))
+        .map(div => getColorClass(div))
+        .filter(color => color);
+
+    const isTubeFullySortedNormal = colors.length === currentMaxTubeCapacity && colors.every(color => color === colors[0]);
+    const isTubeEmpty = colors.length === 0;
+
+    if (isTubeFullySortedNormal || isTubeEmpty) {
+        if (!completedTubes.has(tubeIndex)) {
+            if (isTubeFullySortedNormal) {
+                 showStars();
+            }
+            completedTubes.add(tubeIndex);
+        }
+    } else {
+        if (completedTubes.has(tubeIndex)) {
+            completedTubes.delete(tubeIndex);
+        }
+    }
+
+    let allTubesCorrectlySorted = true;
+    for (const t of tubes) {
+        const tColors = Array.from(t.querySelectorAll('.color:not(.color-empty)'))
+            .map(div => getColorClass(div))
+            .filter(color => color);
+
+        const tIsFullySorted = tColors.length === currentMaxTubeCapacity && tColors.every(color => color === tColors[0]);
+        const tIsEmpty = tColors.length === 0;
+
+        if (!(tIsFullySorted || tIsEmpty)) {
+            allTubesCorrectlySorted = false;
+            break; 
+        }
+    }
+
+    const distinctColorsInLevel = new Set(Object.values(levels[currentLevel].tubes).flat().filter(c => c));
+    const initialEmptyTubes = levels[currentLevel].tubes.filter(tubeArr => tubeArr.length === 0).length;
+    const totalExpectedSortedOrEmptyTubes = distinctColorsInLevel.size + initialEmptyTubes;
+
+    if (allTubesCorrectlySorted && completedTubes.size === totalExpectedSortedOrEmptyTubes) {
+        setTimeout(() => {
+            showNextLevelPopup();
+        }, 1000); 
+    }
+}
+
+
+function showStars() {
+    const winSound = document.getElementById("winSound");
+    winSound.currentTime = 0; 
+    winSound.play();
+
+    const defaults = {
+        spread: 360,
+        ticks: 100,
+        gravity: 0,
+        decay: 0.94,
+        startVelocity: 30,
+        shapes: ['star'],
+        colors: ['#ffdd00', '#ffd700', '#fff700']
+    };
+
+    function fire(particleRatio, opts) {
+        confetti(Object.assign({}, defaults, opts, {
+            particleCount: Math.floor(200 * particleRatio)
+        }));
+    }
+
+    fire(0.25, { scalar: 1.2 });
+    fire(0.2, { scalar: 0.75 });
+    fire(0.35, { scalar: 1.0 });
+    fire(0.1, { scalar: 1.5 });
+    fire(0.1, { scalar: 0.5 });
+}
+
+
+function attachTubeListeners() {
+    const tubes = document.querySelectorAll('.tube');
+    tubes.forEach(tube => {
+        tube.removeEventListener('click', handleTubeClick);
+        tube.addEventListener('click', handleTubeClick);
+    });
+}
+
+function handleTubeClick() {
+    const tube = this; 
+
+    if (selectedTube === null) {
+        const currentTubeColors = Array.from(tube.querySelectorAll('.color:not(.color-empty)'));
+        if (currentTubeColors.length > 0) {
+            tube.classList.add('selected');
+            selectedTube = tube;
+        }
+    } else if (selectedTube === tube) {
+        tube.classList.remove('selected');
+        selectedTube = null;
+    } else {
+        const sourceFilledColors = Array.from(selectedTube.querySelectorAll('.color:not(.color-empty)'));
+        const targetFilledColors = Array.from(tube.querySelectorAll('.color:not(.color-empty)'));
+
+        if (sourceFilledColors.length === 0) {
+            selectedTube.classList.remove('selected');
+            selectedTube = null;
+            return;
+        }
+
+        const topSourceColorDiv = sourceFilledColors[sourceFilledColors.length - 1];
+        const topTargetColorDiv = targetFilledColors.length > 0 ? targetFilledColors[targetFilledColors.length - 1] : null;
+
+        const sourceColorClass = getColorClass(topSourceColorDiv);
+        const targetColorClass = topTargetColorDiv ? getColorClass(topTargetColorDiv) : null;
+
+        if (targetFilledColors.length < currentMaxTubeCapacity && (!topTargetColorDiv || sourceColorClass === targetColorClass)) {
+            const tubes = Array.from(document.querySelectorAll('.tube'));
+            const sourceIndex = tubes.indexOf(selectedTube);
+            
+            const sourceRect = selectedTube.getBoundingClientRect();
+            const targetRect = tube.getBoundingClientRect();
+            const isRight = targetRect.left > sourceRect.left;
+
+            selectedTube.classList.add(isRight ? "pouring-right" : "pouring-left");
+            document.getElementById("pourSound").currentTime = 0; 
+            document.getElementById("pourSound").play();
+
+            setTimeout(() => {
+                selectedTube.removeChild(topSourceColorDiv);
+                const emptyDivSource = document.createElement("div");
+                emptyDivSource.classList.add("color-empty");
+                selectedTube.insertBefore(emptyDivSource, selectedTube.firstChild); 
+
+                if (tube.querySelector('.color-empty')) {
+                    tube.removeChild(tube.querySelector('.color-empty'));
+                }
+                tube.insertBefore(topSourceColorDiv, tube.firstChild); 
+
+                topSourceColorDiv.classList.add("waving");
+                setTimeout(() => {
+                    topSourceColorDiv.classList.remove("waving");
+                }, 300);
+
+                selectedTube.classList.remove("selected", "pouring-left", "pouring-right");
+                selectedTube = null;
+
+                checkTubeCompletion(tube);
+                checkTubeCompletion(tubes[sourceIndex]);
+                injectImagesToColors();
+            }, 300);
+        } else {
+            selectedTube.classList.remove('selected');
+            selectedTube = null;
+            alert("Warnanya beda, gak bisa dipindah!");
+        }
+    }
+}
+
+
+levelBtn.onclick = () => {
+    levelPopup.classList.remove("hidden");
+};
+
+function closeLevelPopup() {
+    levelPopup.classList.add("hidden");
+}
+
+document.querySelectorAll(".level-btn").forEach(btn => {
+    btn.onclick = () => {
+        const level = parseInt(btn.dataset.level);
+        if (!btn.classList.contains("locked")) {
+            currentLevel = level;
+            levelIndicator.textContent = `Level ${level}`;
+            closeLevelPopup();
+            renderLevel(level); 
+        }
+    }
+});
+
+function showNextLevelPopup() {
+    document.getElementById("winSound").pause();
+    document.getElementById("winSound").currentTime = 0;
+    nextLevelPopup.classList.remove("hidden");
+}
+
+function hideNextLevelPopup() {
+    nextLevelPopup.classList.add("hidden");
+}
+
+nextLevelBtn.addEventListener('click', () => {
+    hideNextLevelPopup();
+    if (currentLevel < Object.keys(levels).length) { 
+        currentLevel++;
+        renderLevel(currentLevel);
+        levelIndicator.textContent = `Level ${currentLevel}`;
+        const nextLevelButton = document.querySelector(`.level-btn[data-level="${currentLevel}"]`);
+        if (nextLevelButton) {
+            nextLevelButton.classList.remove("locked");
+            nextLevelButton.disabled = false;
+        }
+    } else {
+        alert("Selamat! Anda telah menyelesaikan semua level yang tersedia!");
+        currentLevel = 1;
+        renderLevel(currentLevel);
+        levelIndicator.textContent = `Level ${currentLevel}`;
+    }
+});
+
+closeNextLevelPopupBtn.addEventListener('click', () => {
+    hideNextLevelPopup();
+});
+
+function renderLevel(level) {
+    game.innerHTML = '';
+    const levelData = levels[level];
+    const dataTubes = levelData.tubes;
+    currentMaxTubeCapacity = levelData.capacity; 
+
+    completedTubes.clear();
+
+    dataTubes.forEach((colors, index) => {
+        const tube = document.createElement("div");
+        tube.classList.add("tube");
+
+        colors.slice().reverse().forEach(color => {
+            const div = document.createElement("div");
+            div.classList.add("color", color);
+            tube.appendChild(div);
+        });
+
+        while(tube.children.length < currentMaxTubeCapacity) {
+            const emptyDiv = document.createElement("div");
+            emptyDiv.classList.add("color-empty");
+            tube.appendChild(emptyDiv);
+        }
+        
+        game.appendChild(tube);
+    });
+
+    selectedTube = null;
+    attachTubeListeners();
+    injectImagesToColors();
+
+    if (currentLevel !== 1) {
+        let allInitialTubesCorrectlyArranged = true;
+        document.querySelectorAll('.tube').forEach(tube => {
+            const tColors = Array.from(tube.querySelectorAll('.color:not(.color-empty)'))
+                .map(div => getColorClass(div))
+                .filter(color => color);
+            const tIsFullySorted = tColors.length === currentMaxTubeCapacity && tColors.every(color => color === tColors[0]);
+            const tIsEmpty = tColors.length === 0;
+            if (!(tIsFullySorted || tIsEmpty)) {
+                allInitialTubesCorrectlyArranged = false;
+            }
+        });
+
+        const distinctColorsInLevel = new Set(Object.values(levels[currentLevel].tubes).flat().filter(c => c));
+        const initialEmptyTubes = levels[currentLevel].tubes.filter(tubeArr => tubeArr.length === 0).length;
+        const totalExpectedSortedOrEmptyTubes = distinctColorsInLevel.size + initialEmptyTubes;
+
+        if (allInitialTubesCorrectlyArranged && completedTubes.size === totalExpectedSortedOrEmptyTubes) {
+            setTimeout(() => {
+                showNextLevelPopup();
+            }, 500);
+        }
+    }
+}
+
+
+renderLevel(currentLevel);
+levelIndicator.textContent = `Level ${currentLevel}`;
+
+resetBtn.addEventListener('click', () => {
+    hideNextLevelPopup();
+    renderLevel(currentLevel);
+});
+    </script>
+</body>
+</html>

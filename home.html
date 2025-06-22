@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Home</title>
+  <link rel="stylesheet" href="beranda.css">
+</head>
+<body>
+  <div class="start-screen" id="startScreen">
+    <div class="start-content">
+      <h1>Water Sort Puzzle</h1>
+      <button id="playBtn">Play</button>
+    </div>
+  </div>
+
+  <script>
+    document.getElementById('playBtn').addEventListener('click', () => {
+      window.location.href = "level1.html";
+    });
+  </script>
+</body>
+</html>
